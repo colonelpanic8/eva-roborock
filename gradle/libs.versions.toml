@@ -1,0 +1,13 @@
+[versions]
+agp = "9.4.1"
+junit = "4.13.2"
+ktlintPlugin = "14.2.0"
+orgJson = "20250517"
+
+[libraries]
+junit = { module = "junit:junit", version.ref = "junit" }
+org-json = { module = "org.json:json", version.ref = "orgJson" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintPlugin" }
