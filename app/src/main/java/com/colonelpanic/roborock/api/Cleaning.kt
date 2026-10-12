@@ -163,6 +163,25 @@ object Cleaning {
 
     fun water(wire: String?): Water? = if (wire == null) Water.HIGH else Water.entries.firstOrNull { it.wire == wire }
 
+    private val ACTIVE_STATES = setOf(5, 11, 16, 17, 18)
+
+    /** Picks the resume command for the unfinished clean `in_cleaning` reports. */
+    fun resumeCommand(status: JSONObject): Pair<List<Pair<String, Any>>, String> {
+        val state = status.optInt("state")
+        if (state in ACTIVE_STATES) throw IllegalStateException("The robot is already ${STATES[state]}.")
+        return when (status.optInt("in_cleaning")) {
+            1 -> listOf<Pair<String, Any>>("app_start" to JSONArray()) to "Resumed the whole-home clean."
+
+            2 -> listOf<Pair<String, Any>>("resume_zoned_clean" to JSONArray()) to "Resumed the zone clean."
+
+            3 -> listOf<Pair<String, Any>>("resume_segment_clean" to JSONArray()) to "Resumed the room clean."
+
+            else -> throw IllegalStateException(
+                "The robot has no unfinished clean to resume (it is ${STATES[state] ?: "in state $state"}).",
+            )
+        }
+    }
+
     private val STATES =
         mapOf(
             1 to "starting",

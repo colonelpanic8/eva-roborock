@@ -20,6 +20,7 @@ class CapabilitiesTest {
     private var failOn: String? = null
     private var silentOn: String? = null
     private var journalText: String? = null
+    private var status = JSONObject().put("state", 8).put("in_cleaning", 0)
 
     private val session =
         object : RpcSession {
@@ -31,6 +32,7 @@ class CapabilitiesTest {
                 sent += method to EvaProtocol.canonical(params)
                 if (method == failOn) throw Robot.RpcError(method, "{\"code\":-10007}")
                 if (method == silentOn) throw Robot.NoReply(method)
+                if (method == "get_status") return JSONArray().put(status)
                 return JSONArray().put("ok")
             }
 
@@ -107,6 +109,21 @@ class CapabilitiesTest {
         assertEquals("unknown", execute("clean_rooms", """{"rooms": ["kitchen"]}""", id = "eva-a").getString("status"))
         silentOn = "set_clean_motor_mode"
         assertEquals("failed", execute("clean_rooms", """{"rooms": ["kitchen"]}""", id = "eva-b").getString("status"))
+    }
+
+    @Test
+    fun resumeContinuesAPausedRoomClean() {
+        status = JSONObject().put("state", 10).put("in_cleaning", 3)
+        val reply = execute("resume", "{}")
+        assertEquals("completed", reply.getString("status"))
+        assertEquals(listOf("get_status", "resume_segment_clean"), sent.map { it.first })
+    }
+
+    @Test
+    fun resumeWithNothingUnfinishedSendsNoCommand() {
+        val reply = execute("resume", "{}")
+        assertEquals("not_executed", reply.getString("status"))
+        assertEquals(listOf("get_status"), sent.map { it.first })
     }
 
     @Test

@@ -166,6 +166,8 @@ class Capabilities(
     private class Plan(
         val commands: List<Pair<String, Any>>,
         val summary: String,
+        /** Chooses the commands from the robot's status; throws [IllegalStateException] to refuse. */
+        val fromStatus: ((JSONObject) -> Pair<List<Pair<String, Any>>, String>)? = null,
     )
 
     private fun plan(
@@ -212,6 +214,10 @@ class Capabilities(
 
             "pause" -> {
                 Plan(listOf("app_pause" to JSONArray()), "Paused the robot.")
+            }
+
+            "resume" -> {
+                Plan(emptyList(), "", fromStatus = Cleaning::resumeCommand)
             }
 
             "return_to_dock" -> {
@@ -288,8 +294,32 @@ class Capabilities(
                 )
             }
         session.use {
-            plan.commands.forEachIndexed { index, (method, params) ->
-                val last = index == plan.commands.lastIndex
+            var commands = plan.commands
+            var summary = plan.summary
+            plan.fromStatus?.let { choose ->
+                val status =
+                    try {
+                        statusOf(it.call("get_status", null, deadline))
+                    } catch (e: Exception) {
+                        return outcome(
+                            invocationId,
+                            "not_sent",
+                            EvaProtocol.STATUS_NOT_EXECUTED,
+                            null,
+                            "Could not read the robot's status: ${explain(e)} Nothing was sent.",
+                        )
+                    }
+                try {
+                    choose(status).let { (chosen, text) ->
+                        commands = chosen
+                        summary = text
+                    }
+                } catch (e: IllegalStateException) {
+                    return outcome(invocationId, "rejected", EvaProtocol.STATUS_NOT_EXECUTED, null, "${e.message} Nothing was sent.")
+                }
+            }
+            commands.forEachIndexed { index, (method, params) ->
+                val last = index == commands.lastIndex
                 try {
                     it.call(method, params, deadline)
                 } catch (e: Robot.RpcError) {
@@ -362,8 +392,8 @@ class Capabilities(
                     }
                 }
             }
+            return outcome(invocationId, "completed", EvaProtocol.STATUS_COMPLETED, null, "$summary The robot confirmed the command.")
         }
-        return outcome(invocationId, "completed", EvaProtocol.STATUS_COMPLETED, null, plan.summary + " The robot confirmed the command.")
     }
 
     private fun outcome(
@@ -439,6 +469,9 @@ class Capabilities(
                 EvaProtocol.notExecuted(EvaProtocol.REASON_INVALID_ARGUMENTS, "Unknown action '$tool'.")
             }
         }
+
+    private fun statusOf(result: Any): JSONObject =
+        (result as? JSONArray)?.optJSONObject(0) ?: result as? JSONObject ?: throw IOException("Unexpected status reply.")
 
     private fun rooms(config: Configuration): List<Room> =
         try {
@@ -529,7 +562,7 @@ class Capabilities(
     }
 
     companion object {
-        private const val CATALOG_REVISION = "catalog-1"
+        private const val CATALOG_REVISION = "catalog-2"
         private const val MAX_WAIT_MILLIS = 30_000
 
         private fun enumProperty(
@@ -608,6 +641,12 @@ class Capabilities(
                     required = listOf("preset"),
                 ),
                 Tool("pause", "Pause the vacuum", "Pause the Roborock vacuum's current cleaning.", write = true),
+                Tool(
+                    "resume",
+                    "Resume the vacuum",
+                    "Resume the Roborock vacuum's paused or interrupted cleaning where it left off.",
+                    write = true,
+                ),
                 Tool(
                     "return_to_dock",
                     "Send the vacuum home",
