@@ -22,7 +22,7 @@ test:
 
 # Talk to the real robot from the JVM using the python-roborock cache at ~/.roborock.
 live-test:
-    ROBOROCK_LIVE=1 ./gradlew --no-daemon :app:testDebugUnitTest --tests '*LiveRobotTest*' -i
+    ROBOROCK_LIVE=1 ./gradlew --no-daemon :app:testDebugUnitTest --tests '*LiveRobotTest*' --rerun -i
 
 build:
     ./gradlew --no-daemon :app:assembleDebug
